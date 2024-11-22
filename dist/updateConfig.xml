@@ -1,0 +1,1 @@
+<configuracao><pingServer>192.168.0.200</pingServer><sourcePath>//192.168.0.200/SistemaGDS</sourcePath><destination><destinationPath>D:/SistemaGDS</destinationPath><deleteFiles><file>SistemaGDS.exe</file><file>Temp\*.mdb</file></deleteFiles></destination></configuracao>
