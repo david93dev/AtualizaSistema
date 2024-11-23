@@ -3,14 +3,14 @@ import shutil
 import psutil
 import xml.etree.ElementTree as ET
 import tkinter as tk
-import threading
-import subprocess
-import json
-import ctypes
-import sys
-
 from tkinter import messagebox, filedialog
 from tkinter import ttk
+import threading
+import subprocess
+import ctypes
+import sys
+import json
+import time
 
 def is_admin():
     try:
@@ -18,11 +18,15 @@ def is_admin():
     except:
         return False
 
+# Elevar para administrador se necessário
 if not is_admin():
-    ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, " ".join(sys.argv), None, 1
-    )
-    sys.exit()
+    if len(sys.argv) == 1:  # Verifica se não foi chamado com um argumento adicional
+        ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, __file__, "elevated", 1
+        )
+        sys.exit()  # Sai da instância atual
+    else:
+        print("Executando com permissões elevadas.")
 
 # Função para ler o arquivo XML e retornar as configurações
 def read_config(xml_path):
@@ -131,9 +135,62 @@ def generate_xml(entry_ping_server, entry_source_path, destination_entries):
 
     save_config(config, 'updateConfig.xml')
 
+def show_paths_from_xml():
+    try:
+        # Ler as configurações do arquivo XML
+        config = read_config('updateConfig.xml')
 
-# Função para executar a atualização do sistema
-import time
+        # Criar a janela para exibição
+        paths_window = tk.Toplevel(root)
+        paths_window.title("Caminhos Configurados")
+        paths_window.geometry("500x200")
+
+        # Exibir o servidor de ping
+        label_ping_server = tk.Label(paths_window, text=f"Servidor de Ping: {config['pingServer']}", wraplength=480)
+        label_ping_server.pack(pady=5)
+
+        # Exibir o caminho de origem
+        label_source_path = tk.Label(paths_window, text=f"Caminho de Origem: {config['sourcePath']}", wraplength=480)
+        label_source_path.pack(pady=5)
+
+        # Exibir os destinos
+        label_destinations = tk.Label(paths_window, text="Destinos Configurados:")
+        label_destinations.pack(pady=5)
+
+        # Criar um frame com rolagem para destinos
+        frame_scroll = tk.Frame(paths_window)
+        frame_scroll.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        canvas = tk.Canvas(frame_scroll)
+        scrollbar = ttk.Scrollbar(frame_scroll, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        for i, destination in enumerate(config['destinations'], start=1):
+            label_destination = tk.Label(
+                scrollable_frame,
+                text=f"Destino {i}: {destination['path']}",
+                justify="center",  # Centraliza o texto em linhas múltiplas
+                wraplength=460,  # Define a largura máxima para quebrar as linhas
+                anchor="center",  # Centraliza o conteúdo dentro do label
+            )
+            label_destination.pack(pady=5)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    except FileNotFoundError:
+        messagebox.showerror("Erro", "Arquivo XML de configuração não encontrado!")
+    except Exception as e:
+        messagebox.showerror("Erro", f"Ocorreu um erro ao exibir os caminhos: {e}")
+
 
 # Função para calcular o tamanho total dos arquivos na origem
 def calculate_total_size(source_path):
@@ -370,8 +427,7 @@ def set_autorun(enable):
     app_path = os.path.abspath(__file__)
     config = load_config()
     if enable:
-        # Altere o argumento /SC ONLOGON para /SC ONSTART
-        command = f'SchTasks /Create /SC ONSTART /TN "{task_name}" /TR "{app_path}" /F'
+        command = f'SchTasks /Create /SC ONLOGON /TN "{task_name}" /TR "{app_path}" /F'
         config["autorun"] = True
     else:
         command = f'SchTasks /Delete /TN "{task_name}" /F'
@@ -381,7 +437,7 @@ def set_autorun(enable):
         subprocess.run(command, shell=True, check=True)
         save_config(config)
         if enable:
-            messagebox.showinfo("Sucesso", "O aplicativo será executado sempre que o Windows for iniciado!")
+            messagebox.showinfo("Sucesso", "O aplicativo será executado ao iniciar o Windows!")
         else:
             messagebox.showinfo("Sucesso", "A inicialização automática foi desativada!")
     except subprocess.CalledProcessError as e:
@@ -448,7 +504,7 @@ def create_config_window(parent_window):
     button_cancel.pack(pady=10)
 
 def create_main_window():
-    global progress_bar, root, button_update_system
+    global progress_bar, root
 
     root = tk.Tk()
     root.title("Atualiza SistemaGDS")
@@ -466,6 +522,10 @@ def create_main_window():
     button_configure = tk.Button(button_frame, text="Configurar XML", command=lambda: create_config_window(root))
     button_configure.pack(side="left", padx=5)
 
+    # Botão para exibir caminhos do XML
+    button_show_paths = tk.Button(button_frame, text="Exibir Caminhos do XML", command=show_paths_from_xml)
+    button_show_paths.pack(side="left", padx=5)
+
     # Barra de progresso
     progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
     progress_bar.pack(pady=10)
@@ -479,11 +539,6 @@ def create_main_window():
         command=lambda: set_autorun(autorun_var.get()),
     )
     checkbox_autorun.pack(pady=10)
-
-    # Verifica se a execução automática foi ativada e se o script foi iniciado
-    if check_autorun():
-        # Simula o clique no botão de atualizar assim que a janela for carregada
-        root.after(1000, button_update_system.invoke)
 
     # Função para sair do programa
     def on_close():
