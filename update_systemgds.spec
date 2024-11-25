@@ -5,7 +5,7 @@ a = Analysis(
     ['update_systemgds.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.png', '.')],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
